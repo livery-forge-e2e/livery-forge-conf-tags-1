@@ -1,0 +1,33 @@
+name: conf
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: verdict
+        shell: sh
+        # GITHUB_TOKEN is an expression, not an ambient variable: a
+        # run step's shell only sees it when the step exports it.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if grep -q "conf:failure" "$GITHUB_EVENT_PATH"; then
+            echo "verdict: failure"
+            exit 1
+          fi
+          if grep -q "conf:hang" "$GITHUB_EVENT_PATH"; then
+            echo "holding until released"
+            i=0
+            ref="git/ref/tags/release-$GITHUB_SHA"
+            until curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" \
+                "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/$ref" \
+                > /dev/null 2>&1; do
+              i=$((i+1))
+              if [ "$i" -gt 300 ]; then exit 1; fi
+              sleep 2
+            done
+          fi
+          echo "verdict: success"
